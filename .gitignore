@@ -47,3 +47,11 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local Netlify folder
+.netlify
+
+# Intro source files (intro is packaged in assets/videos/intro.mp4 and web/intro.mp4)
+INTRO/
+PlaceTrack_sci-fi_video_intro*
+

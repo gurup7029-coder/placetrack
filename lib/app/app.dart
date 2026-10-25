@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../screens/auth/login_screen.dart';
+import '../screens/intro/intro_video_screen.dart';
 import '../services/theme_service.dart';
 import 'theme.dart';
 
@@ -20,7 +20,8 @@ class PlaceTrackApp extends StatelessWidget {
           theme: kIsWeb ? PlaceTrackTheme.webLight() : PlaceTrackTheme.light(),
           darkTheme: kIsWeb ? PlaceTrackTheme.webDark() : PlaceTrackTheme.dark(),
           themeMode: kIsWeb ? ThemeMode.dark : themeService.themeMode,
-          home: const LoginScreen(),
+          // Plays the Sci-Fi video intro first, then transitions to Login
+          home: const IntroVideoScreen(),
         );
       },
     );
