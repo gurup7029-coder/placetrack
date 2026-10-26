@@ -1,4 +1,4 @@
-package com.example.placetrack
+package com.placetrack.app
 
 import io.flutter.embedding.android.FlutterActivity
 
