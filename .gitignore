@@ -55,3 +55,5 @@ app.*.map.json
 INTRO/
 PlaceTrack_sci-fi_video_intro*
 
+
+.vercel
