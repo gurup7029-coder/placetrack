@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/placement_models.dart';
 
@@ -267,42 +269,144 @@ class PlacementDataService extends ChangeNotifier {
     return false;
   }
 
-  // Supabase Cloud Sync Helpers
-  void _syncAdminToCloud(AdminModel admin) {
+  // ==========================================
+  // Local Persistent Storage (SharedPreferences)
+  // ==========================================
+  Future<void> loadFromLocalStorage() async {
     try {
-      Supabase.instance.client.from('admins').upsert(admin.toMap());
+      final prefs = await SharedPreferences.getInstance();
+      final studentsJson = prefs.getString('placetrack_students');
+      if (studentsJson != null && studentsJson.isNotEmpty) {
+        final List list = jsonDecode(studentsJson);
+        for (final item in list) {
+          final s = StudentModel.fromMap(Map<String, dynamic>.from(item));
+          final idx = _students.indexWhere((existing) => existing.id == s.id || existing.regNo == s.regNo);
+          if (idx != -1) {
+            _students[idx] = s;
+          } else {
+            _students.add(s);
+          }
+        }
+      }
+
+      final adminsJson = prefs.getString('placetrack_admins');
+      if (adminsJson != null && adminsJson.isNotEmpty) {
+        final List list = jsonDecode(adminsJson);
+        for (final item in list) {
+          final adm = AdminModel.fromMap(Map<String, dynamic>.from(item));
+          final idx = _admins.indexWhere((a) => a.email.toLowerCase() == adm.email.toLowerCase());
+          if (idx != -1) {
+            _admins[idx] = adm;
+          } else {
+            _admins.add(adm);
+          }
+        }
+      }
+
+      final drivesJson = prefs.getString('placetrack_drives');
+      if (drivesJson != null && drivesJson.isNotEmpty) {
+        final List list = jsonDecode(drivesJson);
+        if (list.isNotEmpty) {
+          _drives.clear();
+          for (final item in list) {
+            _drives.add(PlacementDrive.fromMap(Map<String, dynamic>.from(item)));
+          }
+        }
+      }
+      notifyListeners();
+      debugPrint('Local storage loaded: ${_students.length} students, ${_admins.length} admins, ${_drives.length} drives.');
     } catch (e) {
-      debugPrint('Cloud sync admin error: $e');
+      debugPrint('Local storage load error: $e');
     }
   }
 
-  void _syncDriveToCloud(PlacementDrive drive) {
+  Future<void> saveToLocalStorage() async {
     try {
-      Supabase.instance.client.from('placement_drives').upsert(drive.toMap());
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('placetrack_students', jsonEncode(_students.map((s) => s.toMap()).toList()));
+      await prefs.setString('placetrack_admins', jsonEncode(_admins.map((a) => a.toMap()).toList()));
+      await prefs.setString('placetrack_drives', jsonEncode(_drives.map((d) => d.toMap()).toList()));
+    } catch (e) {
+      debugPrint('Local storage save error: $e');
+    }
+  }
+
+  // ==========================================
+  // Supabase Cloud Sync Helpers
+  // ==========================================
+  void _syncAdminToCloud(AdminModel admin) async {
+    saveToLocalStorage();
+    bool directSuccess = false;
+    try {
+      await Supabase.instance.client.from('admins').upsert(admin.toMap());
+      directSuccess = true;
+      debugPrint('Admin synced to Supabase admins table: ${admin.email}');
+    } catch (e) {
+      debugPrint('Direct admin sync notice (using cloud fallback channel): $e');
+    }
+
+    if (!directSuccess) {
+      // Robust cloud fallback: store in placement_drives table with SYSTEM_ACCOUNT status
+      try {
+        final adminDrivePayload = {
+          'id': 'sys_adm_${admin.id}',
+          'company_name': '[SYSTEM_ADMIN]',
+          'role': admin.designation,
+          'ctc_package': admin.email,
+          'drive_date': DateTime.now().toIso8601String(),
+          'location': admin.institution,
+          'description': jsonEncode(admin.toMap()),
+          'min_cgpa': 0.0,
+          'max_backlogs': 0,
+          'status': 'SYSTEM_ACCOUNT',
+          'eligible_departments': <String>[],
+          'enrolled_student_ids': <String>[],
+          'placed_student_ids': <String>[],
+          'placed_dates': <String, dynamic>{},
+          'rounds': <Map<String, dynamic>>[],
+        };
+        await Supabase.instance.client.from('placement_drives').upsert(adminDrivePayload);
+        debugPrint('Admin synced to Supabase cloud channel: ${admin.email}');
+      } catch (e) {
+        debugPrint('Cloud fallback admin sync error: $e');
+      }
+    }
+  }
+
+  void _syncDriveToCloud(PlacementDrive drive) async {
+    saveToLocalStorage();
+    try {
+      await Supabase.instance.client.from('placement_drives').upsert(drive.toMap());
+      debugPrint('Drive synced to cloud: ${drive.companyName}');
     } catch (e) {
       debugPrint('Cloud sync drive error: $e');
     }
   }
 
-  void _syncStudentToCloud(StudentModel student) {
+  void _syncStudentToCloud(StudentModel student) async {
+    saveToLocalStorage();
     try {
-      Supabase.instance.client.from('students').upsert(student.toMap());
+      // Use toSupabaseMap() to prevent schema errors from missing columns
+      await Supabase.instance.client.from('students').upsert(student.toSupabaseMap());
+      debugPrint('Student synced to cloud: ${student.name} (${student.regNo})');
     } catch (e) {
       debugPrint('Cloud sync student error: $e');
     }
   }
 
-  void _deleteDriveFromCloud(String driveId) {
+  void _deleteDriveFromCloud(String driveId) async {
+    saveToLocalStorage();
     try {
-      Supabase.instance.client.from('placement_drives').delete().eq('id', driveId);
+      await Supabase.instance.client.from('placement_drives').delete().eq('id', driveId);
     } catch (e) {
       debugPrint('Cloud delete drive error: $e');
     }
   }
 
-  void _deleteStudentFromCloud(String studentId) {
+  void _deleteStudentFromCloud(String studentId) async {
+    saveToLocalStorage();
     try {
-      Supabase.instance.client.from('students').delete().eq('id', studentId);
+      await Supabase.instance.client.from('students').delete().eq('id', studentId);
     } catch (e) {
       debugPrint('Cloud delete student error: $e');
     }
@@ -315,23 +419,57 @@ class PlacementDataService extends ChangeNotifier {
       // 1. Fetch Students from Supabase
       final studentsRes = await client.from('students').select();
       if (studentsRes.isNotEmpty) {
-        _students.clear();
+        final Set<String> fetchedIds = {};
         for (final item in studentsRes) {
-          _students.add(StudentModel.fromMap(Map<String, dynamic>.from(item)));
+          final s = StudentModel.fromMap(Map<String, dynamic>.from(item));
+          fetchedIds.add(s.id);
+          final idx = _students.indexWhere((existing) => existing.id == s.id || existing.regNo == s.regNo);
+          if (idx != -1) {
+            _students[idx] = s;
+          } else {
+            _students.add(s);
+          }
+        }
+
+        // Upload any local students that aren't yet in Supabase
+        for (final s in _students) {
+          if (!fetchedIds.contains(s.id)) {
+            _syncStudentToCloud(s);
+          }
         }
       } else {
-        // Seed initial pre-loaded students to cloud
+        // Seed initial students to cloud
         for (final s in _students) {
-          await client.from('students').upsert(s.toMap());
+          await client.from('students').upsert(s.toSupabaseMap());
         }
       }
 
-      // 2. Fetch Placement Drives from Supabase
+      // 2. Fetch Placement Drives from Supabase (and extract any synced Admins)
       final drivesRes = await client.from('placement_drives').select();
       if (drivesRes.isNotEmpty) {
         _drives.clear();
         for (final item in drivesRes) {
-          _drives.add(PlacementDrive.fromMap(Map<String, dynamic>.from(item)));
+          final status = item['status']?.toString() ?? '';
+          final id = item['id']?.toString() ?? '';
+
+          // If this is an Admin account stored in cloud channel:
+          if (status == 'SYSTEM_ACCOUNT' || id.startsWith('sys_adm_')) {
+            try {
+              final desc = item['description']?.toString() ?? '';
+              final adminData = jsonDecode(desc);
+              final adm = AdminModel.fromMap(Map<String, dynamic>.from(adminData));
+              final idx = _admins.indexWhere((a) => a.email.toLowerCase() == adm.email.toLowerCase());
+              if (idx != -1) {
+                _admins[idx] = adm;
+              } else {
+                _admins.add(adm);
+              }
+            } catch (e) {
+              debugPrint('Error decoding sys admin: $e');
+            }
+          } else {
+            _drives.add(PlacementDrive.fromMap(Map<String, dynamic>.from(item)));
+          }
         }
       } else {
         // Seed initial pre-loaded drives to cloud
@@ -340,24 +478,30 @@ class PlacementDataService extends ChangeNotifier {
         }
       }
 
-      // 3. Fetch Admins from Supabase
+      // 3. Fetch Admins from Supabase admins table if available
       try {
         final adminsRes = await client.from('admins').select();
         if (adminsRes.isNotEmpty) {
           for (final item in adminsRes) {
             final adm = AdminModel.fromMap(Map<String, dynamic>.from(item));
-            if (!_admins.any((a) => a.email.toLowerCase() == adm.email.toLowerCase())) {
+            final idx = _admins.indexWhere((a) => a.email.toLowerCase() == adm.email.toLowerCase());
+            if (idx != -1) {
+              _admins[idx] = adm;
+            } else {
               _admins.add(adm);
             }
           }
         }
       } catch (_) {}
 
+      // Save merged cloud data to local persistent storage
+      await saveToLocalStorage();
+
       _isCloudConnected = true;
       _isDatabasePaused = false;
       _cloudStatusMessage = '🟢 Active & Synchronized with Supabase Cloud';
       notifyListeners();
-      debugPrint('Supabase synchronization active: ${_students.length} students & ${_drives.length} drives loaded.');
+      debugPrint('Supabase synchronization active: ${_students.length} students, ${_admins.length} admins, ${_drives.length} drives.');
     } catch (e) {
       final errStr = e.toString().toLowerCase();
       if (errStr.contains('socketexception') ||

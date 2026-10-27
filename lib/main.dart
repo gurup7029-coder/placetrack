@@ -7,6 +7,9 @@ import 'services/supabase_config.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 1. Instantly load locally persisted accounts and drives (works offline / instant launch)
+  await PlacementDataService().loadFromLocalStorage();
+
   try {
     await Supabase.initialize(
       url: SupabaseConfig.url,
@@ -17,7 +20,7 @@ void main() async {
     debugPrint('Supabase initialization note: $e');
   }
 
-  // Pre-load / sync cloud data from Supabase
+  // 2. Sync with Supabase Cloud in background
   PlacementDataService().initSupabaseSync();
 
   runApp(const PlaceTrackApp());

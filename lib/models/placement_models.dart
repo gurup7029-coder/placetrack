@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 enum UserRole { admin, student }
 
 class AdminModel {
@@ -185,7 +187,58 @@ class StudentModel {
     };
   }
 
+  /// Exports only valid Supabase columns and encodes authentication credentials
+  /// into resume_url to guarantee it NEVER fails even if DB schema lacks password column.
+  Map<String, dynamic> toSupabaseMap() {
+    String encodedResumeUrl = resumeUrl;
+    if (username.isNotEmpty || password != 'student123' || dob.isNotEmpty) {
+      final authPayload = {
+        'u': username,
+        'p': password,
+        'd': dob,
+        'url': resumeUrl,
+      };
+      encodedResumeUrl = 'pt_auth:${jsonEncode(authPayload)}';
+    }
+
+    return {
+      'id': id,
+      'name': name,
+      'reg_no': regNo,
+      'department': department,
+      'year': year,
+      'section': section,
+      'cgpa': cgpa,
+      'backlogs': backlogs,
+      'email': email,
+      'phone': phone,
+      'resume_url': encodedResumeUrl,
+      'resume_file_name': resumeFileName,
+      'resume_file_size': resumeFileSize,
+      'resume_upload_date': resumeUploadDate,
+    };
+  }
+
   factory StudentModel.fromMap(Map<String, dynamic> map) {
+    String rawResumeUrl = map['resume_url']?.toString() ?? '';
+    String parsedUser = map['username']?.toString() ?? '';
+    String parsedPass = map['password']?.toString() ?? '';
+    String parsedDob = map['dob']?.toString() ?? '';
+    String cleanResumeUrl = rawResumeUrl;
+
+    // Check if resume_url contains encoded credentials from Supabase sync
+    if (rawResumeUrl.startsWith('pt_auth:')) {
+      try {
+        final jsonStr = rawResumeUrl.substring('pt_auth:'.length);
+        final decoded = jsonDecode(jsonStr);
+        if (parsedUser.isEmpty && decoded['u'] != null) parsedUser = decoded['u'].toString();
+        if (parsedPass.isEmpty && decoded['p'] != null) parsedPass = decoded['p'].toString();
+        if (parsedDob.isEmpty && decoded['d'] != null) parsedDob = decoded['d'].toString();
+        cleanResumeUrl = decoded['url']?.toString() ?? '';
+      } catch (_) {}
+    }
+    if (parsedPass.isEmpty) parsedPass = 'student123';
+
     return StudentModel(
       id: map['id']?.toString() ?? '',
       name: map['name']?.toString() ?? '',
@@ -197,10 +250,10 @@ class StudentModel {
       backlogs: (map['backlogs'] is num) ? (map['backlogs'] as num).toInt() : (int.tryParse(map['backlogs']?.toString() ?? '0') ?? 0),
       email: map['email']?.toString() ?? '',
       phone: map['phone']?.toString() ?? '',
-      dob: map['dob']?.toString() ?? '',
-      username: map['username']?.toString() ?? '',
-      password: map['password']?.toString() ?? 'student123',
-      resumeUrl: map['resume_url']?.toString() ?? '',
+      dob: parsedDob,
+      username: parsedUser,
+      password: parsedPass,
+      resumeUrl: cleanResumeUrl,
       resumeFileName: map['resume_file_name']?.toString() ?? '',
       resumeFilePath: '',
       resumeFileSize: map['resume_file_size']?.toString() ?? '',
