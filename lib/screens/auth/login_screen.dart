@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import '../../app/theme.dart';
 import '../../models/placement_models.dart';
 import '../../services/placement_data_service.dart';
@@ -25,6 +26,9 @@ class _LoginScreenState extends State<LoginScreen>
   late AnimationController _animController;
   late Animation<double> _fadeIn;
 
+  VideoPlayerController? _bgVideoController;
+  bool _isVideoBgInitialized = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,6 +38,29 @@ class _LoginScreenState extends State<LoginScreen>
     );
     _fadeIn = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _animController.forward();
+    _initBgVideo();
+  }
+
+  Future<void> _initBgVideo() async {
+    try {
+      final controller = VideoPlayerController.asset('assets/videos/intro.mp4');
+      _bgVideoController = controller;
+      await controller.initialize();
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+      await controller.setLooping(true);
+      await controller.setVolume(0.0); // Muted background playback
+      await controller.play();
+      if (mounted) {
+        setState(() {
+          _isVideoBgInitialized = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Login background video error: $e');
+    }
   }
 
   @override
@@ -41,6 +68,7 @@ class _LoginScreenState extends State<LoginScreen>
     _animController.dispose();
     _idController.dispose();
     _passwordController.dispose();
+    _bgVideoController?.dispose();
     super.dispose();
   }
 
@@ -1437,338 +1465,381 @@ class _LoginScreenState extends State<LoginScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A), // Dark navy
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
-            child: FadeTransition(
-              opacity: _fadeIn,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Logo
-                  Container(
-                    width: 68,
-                    height: 68,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF1A56DB), Color(0xFF7E3AF2)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Live Looping Intro Video Background
+          if (_isVideoBgInitialized && _bgVideoController != null)
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _bgVideoController!.value.size.width,
+                  height: _bgVideoController!.value.size.height,
+                  child: VideoPlayer(_bgVideoController!),
+                ),
+              ),
+            ),
+
+          // 2. High-Tech Glass & Vignette Overlay for maximum readability & premium aesthetic
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0F172A).withAlpha(195),
+                    const Color(0xFF0F172A).withAlpha(225),
+                    const Color(0xFF020617).withAlpha(245),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Foreground Login Form & Role Selector
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+                child: FadeTransition(
+                  opacity: _fadeIn,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Logo
+                      Container(
+                        width: 68,
+                        height: 68,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1A56DB), Color(0xFF7E3AF2)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1A56DB).withAlpha(80),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.track_changes_rounded,
+                          color: Colors.white,
+                          size: 34,
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF1A56DB).withAlpha(80),
-                          blurRadius: 20,
-                          offset: const Offset(0, 6),
+                      const SizedBox(height: 16),
+
+                      const Text(
+                        'PlaceTrack',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.track_changes_rounded,
-                      color: Colors.white,
-                      size: 34,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Placement & Training Console',
+                        style: TextStyle(
+                          color: Colors.white.withAlpha(140),
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
 
-                  const Text(
-                    'PlaceTrack',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Placement & Training Console',
-                    style: TextStyle(
-                      color: Colors.white.withAlpha(140),
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Role Selector Switch (Admin vs Student)
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withAlpha(20)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _onRoleChanged(UserRole.admin),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _selectedRole == UserRole.admin
-                                    ? PlaceTrackTheme.primary
-                                    : Colors.transparent,
+                      // Role Selector Switch (Admin vs Student)
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B).withAlpha(220),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withAlpha(25)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => _onRoleChanged(UserRole.admin),
                                 borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.admin_panel_settings_rounded,
-                                    size: 18,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
                                     color: _selectedRole == UserRole.admin
-                                        ? Colors.white
-                                        : Colors.white60,
+                                        ? PlaceTrackTheme.primary
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Admin / Officer',
-                                    style: TextStyle(
-                                      color: _selectedRole == UserRole.admin
-                                          ? Colors.white
-                                          : Colors.white60,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.admin_panel_settings_rounded,
+                                        size: 18,
+                                        color: _selectedRole == UserRole.admin
+                                            ? Colors.white
+                                            : Colors.white60,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Admin / Officer',
+                                        style: TextStyle(
+                                          color: _selectedRole == UserRole.admin
+                                              ? Colors.white
+                                              : Colors.white60,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _onRoleChanged(UserRole.student),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _selectedRole == UserRole.student
-                                    ? const Color(0xFF0F766E)
-                                    : Colors.transparent,
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => _onRoleChanged(UserRole.student),
                                 borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.school_rounded,
-                                    size: 18,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
                                     color: _selectedRole == UserRole.student
-                                        ? Colors.white
-                                        : Colors.white60,
+                                        ? const Color(0xFF0F766E)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Student Portal',
-                                    style: TextStyle(
-                                      color: _selectedRole == UserRole.student
-                                          ? Colors.white
-                                          : Colors.white60,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.school_rounded,
+                                        size: 18,
+                                        color: _selectedRole == UserRole.student
+                                            ? Colors.white
+                                            : Colors.white60,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Student Portal',
+                                        style: TextStyle(
+                                          color: _selectedRole == UserRole.student
+                                              ? Colors.white
+                                              : Colors.white60,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Login Form Card
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withAlpha(20)),
-                    ),
-                    padding: const EdgeInsets.all(22),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _selectedRole == UserRole.admin
-                                ? 'Placement Officer Login'
-                                : 'Student Portal Sign In',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _selectedRole == UserRole.admin
-                                ? 'Manage drives, create rounds & shortlist students'
-                                : 'Check your applied drives & assigned round results',
-                            style: TextStyle(
-                              color: Colors.white.withAlpha(120),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-
-                          // ID / Email Field
-                          Text(
-                            _selectedRole == UserRole.admin ? 'Admin Email / ID' : 'Roll Number / Username / Email',
-                            style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _idController,
-                            style: const TextStyle(color: Colors.white, fontSize: 14),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: const Color(0xFF0F172A),
-                              prefixIcon: Icon(
-                                _selectedRole == UserRole.admin ? Icons.email_outlined : Icons.badge_outlined,
-                                color: Colors.white38,
-                                size: 20,
-                              ),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
-                          ),
-                          const SizedBox(height: 14),
-
-                          // Password Field
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Password',
-                                style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
-                              ),
-                              InkWell(
-                                onTap: _onForgotPasswordPressed,
-                                child: Text(
-                                  'Forgot Password?',
-                                  style: TextStyle(
-                                    color: _selectedRole == UserRole.admin
-                                        ? Colors.lightBlueAccent
-                                        : Colors.tealAccent,
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            style: const TextStyle(color: Colors.white, fontSize: 14),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: const Color(0xFF0F172A),
-                              prefixIcon: const Icon(Icons.lock_outline, color: Colors.white38, size: 20),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                                  color: Colors.white38,
-                                  size: 18,
-                                ),
-                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                              ),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            validator: (v) => (v == null || v.isEmpty) ? 'Password is required' : null,
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Submit Button
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: _isLoading ? null : _handleLogin,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _selectedRole == UserRole.admin
-                                    ? PlaceTrackTheme.primary
-                                    : const Color(0xFF0F766E),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                    )
-                                  : Text(
-                                      _selectedRole == UserRole.admin ? 'Sign In as Officer' : 'Sign In as Student',
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // Role Specific Action Buttons
-                          if (_selectedRole == UserRole.student) ...[
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: _showStudentRegistrationDialog,
-                                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18, color: Colors.tealAccent),
-                                label: const Text(
-                                  'First Time Login? Register Student Account',
-                                  style: TextStyle(color: Colors.tealAccent, fontSize: 12.5, fontWeight: FontWeight.w600),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(color: Colors.tealAccent.withAlpha(100)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                              ),
-                            ),
-                          ] else ...[
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: _showAdminRegistrationDialog,
-                                icon: const Icon(Icons.person_add_rounded, size: 18, color: Colors.lightBlueAccent),
-                                label: const Text(
-                                  'New Placement Officer? Register Admin Account',
-                                  style: TextStyle(color: Colors.lightBlueAccent, fontSize: 12.5, fontWeight: FontWeight.w600),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(color: Colors.lightBlueAccent.withAlpha(100)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Center(
-                              child: TextButton.icon(
-                                onPressed: _showAdminForgotPasswordDialog,
-                                icon: const Icon(Icons.vpn_key_rounded, size: 16, color: Colors.white60),
-                                label: const Text(
-                                  'Officer Reset Security Passcode',
-                                  style: TextStyle(color: Colors.white60, fontSize: 12),
                                 ),
                               ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 18),
+
+                      // Login Form Card
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B).withAlpha(235),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: Colors.white.withAlpha(25)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(120),
+                              blurRadius: 30,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(22),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedRole == UserRole.admin
+                                    ? 'Placement Officer Login'
+                                    : 'Student Portal Sign In',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _selectedRole == UserRole.admin
+                                    ? 'Manage drives, create rounds & shortlist students'
+                                    : 'Check your applied drives & assigned round results',
+                                style: TextStyle(
+                                  color: Colors.white.withAlpha(120),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+
+                              // ID / Email Field
+                              Text(
+                                _selectedRole == UserRole.admin ? 'Admin Email / ID' : 'Roll Number / Username / Email',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+                              ),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _idController,
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: const Color(0xFF0F172A),
+                                  prefixIcon: Icon(
+                                    _selectedRole == UserRole.admin ? Icons.email_outlined : Icons.badge_outlined,
+                                    color: Colors.white38,
+                                    size: 20,
+                                  ),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Password Field
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Password',
+                                    style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+                                  ),
+                                  InkWell(
+                                    onTap: _onForgotPasswordPressed,
+                                    child: Text(
+                                      'Forgot Password?',
+                                      style: TextStyle(
+                                        color: _selectedRole == UserRole.admin
+                                            ? Colors.lightBlueAccent
+                                            : Colors.tealAccent,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: _obscurePassword,
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: const Color(0xFF0F172A),
+                                  prefixIcon: const Icon(Icons.lock_outline, color: Colors.white38, size: 20),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                      color: Colors.white38,
+                                      size: 18,
+                                    ),
+                                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  ),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                validator: (v) => (v == null || v.isEmpty) ? 'Password is required' : null,
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Submit Button
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _handleLogin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _selectedRole == UserRole.admin
+                                        ? PlaceTrackTheme.primary
+                                        : const Color(0xFF0F766E),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                        )
+                                      : Text(
+                                          _selectedRole == UserRole.admin ? 'Sign In as Officer' : 'Sign In as Student',
+                                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Role Specific Action Buttons
+                              if (_selectedRole == UserRole.student) ...[
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _showStudentRegistrationDialog,
+                                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 18, color: Colors.tealAccent),
+                                    label: const Text(
+                                      'First Time Login? Register Student Account',
+                                      style: TextStyle(color: Colors.tealAccent, fontSize: 12.5, fontWeight: FontWeight.w600),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(color: Colors.tealAccent.withAlpha(100)),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ),
+                              ] else ...[
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _showAdminRegistrationDialog,
+                                    icon: const Icon(Icons.person_add_rounded, size: 18, color: Colors.lightBlueAccent),
+                                    label: const Text(
+                                      'New Placement Officer? Register Admin Account',
+                                      style: TextStyle(color: Colors.lightBlueAccent, fontSize: 12.5, fontWeight: FontWeight.w600),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(color: Colors.lightBlueAccent.withAlpha(100)),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Center(
+                                  child: TextButton.icon(
+                                    onPressed: _showAdminForgotPasswordDialog,
+                                    icon: const Icon(Icons.vpn_key_rounded, size: 16, color: Colors.white60),
+                                    label: const Text(
+                                      'Officer Reset Security Passcode',
+                                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
